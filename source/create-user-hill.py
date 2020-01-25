@@ -10,7 +10,7 @@ ohioaws = { "region": "us-east-2",
 
 # Amazon Linux 2 AMI in Ohio
 ohioubuntu = { "region": "us-east-2", 
-                 "sg": ["sg-08fc1700d2eccec0f",], # OPEN_HOME_UNH
+                 "sg": ["sg-06c9b734c321734ca",], # KOTH
                  "sshkey": "ohio",
                  "ami": "ami-0d5d9d301c853a04a"
                  }
@@ -32,7 +32,7 @@ openvpn = { "local": { "region": "eu-west-2",
 
 # CTF run in Ohio
 spec_json = { "local": { "region": "us-east-2", 
-                         "sg": ["sg-08fc1700d2eccec0f",], # OPEN_HOME_UNH
+                         "sg": ["sg-06c9b734c321734ca",], # KOTH
                          "sshkey": "ohio",
                          "ami": "ami-0dacb0c129b49f529"
                          },
