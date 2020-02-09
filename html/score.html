@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+        <head>
+
+                <meta http-equiv="content-type" content="text/html; charset=utf-8">
+                <meta http-equiv="X-UA-Compatible" content="IE=edge">
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>King of the Hill : Scoreboard</title>
+                <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+                <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" />
+                <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+        </head>
+        <body>
+                <div class="container">
+                        <div class="table-responsive">
+                                <br />
+                                <h1 align="center"><a href="index.html">King of the hill scoreboard</a></h1>
+                                <h2 align="center"><span id="datetime"></span></h2>
+                                <br />
+                                <div class="col-md-3">
+
+                                </div>
+                                <div class="col-md-6" style="min-height:900px;">
+                                        <br />
+                                        <div id="scoreboard">
+                                        </div>
+                                </div>
+                                <div style="clear:both"></div>
+                        </div>
+                </div>
+        </body>
+</html>
+
+<script>
+var dt = new Date();
+document.getElementById("datetime").innerHTML = dt.toLocaleString();
+</script>
+
+<script>
+$(document).ready(function(){
+                $.ajax({
+                        url:"score.csv",
+                        dataType:"text",
+                        success:function(data)
+                        {
+                                var score_data = data.split(/\r?\n|\r/);
+                                var table_data = '<table class="table table-bordered table-striped">';
+                                for(var count = 0; count<score_data.length; count++)
+                                {
+                                        var cell_data = score_data[count].split(",");
+                                        table_data += '<tr>';
+                                        for(var cell_count=0; cell_count<cell_data.length; cell_count++)
+                                        {
+                                                if(count === 0)
+                                                {
+                                                        table_data += '<th>'+cell_data[cell_count]+'</th>';
+                                                }
+                                                else
+                                                {
+                                                        table_data += '<td>'+cell_data[cell_count]+'</td>';
+                                                }
+                                        }
+                                        table_data += '</tr>';
+                                }
+                                table_data += '</table>';
+                                $('#scoreboard').html(table_data);
+                        }
+                });
+        
+});
+</script>
