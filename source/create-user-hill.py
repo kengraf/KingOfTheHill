@@ -1,129 +1,123 @@
 import boto3
 import sys, re
 
-# Amazon Linux 2 AMI in Ohio
-ohioaws = { "region": "us-east-2", 
-                 "sg": ["sg-08fc1700d2eccec0f",], # OPEN_HOME_UNH
-                 "sshkey": "ohio",
-                 "ami": "ami-0dacb0c129b49f529"
-                 }
+# KOTH run in Ohio
+spec = { "region": "us-east-2", 
+         "sg": "sg-036a520b734a05372", # UNH-CTF
+         "sshkey": "ohio",
+         "ami": "ami-00d711b946af13548",
+         "domain" : ".cyber-unh.org",
+         "attack_list" : []
+         }
 
-# Amazon Linux 2 AMI in Ohio
-ohioubuntu = { "region": "us-east-2", 
-                 "sg": ["sg-06c9b734c321734ca",], # KOTH
-                 "sshkey": "ohio",
-                 "ami": "ami-0d5d9d301c853a04a"
-                 }
-
-# IT666 lab wants a London based deployment
-openvpn = { "local": { "region": "eu-west-2", 
-                       "sg": ["sg-0c51113a91a64fa42",], # OPEN_HOME_UNH
-                       "sshkey": "london2",
-                       "ami": "ami-05f37c3995fffb4fd"
-                       },
-            "tags": [ { 'Key': 'DNS',
-                        'Value': 'openvpn.cyber-unh.org'
-                        },
-                      { 'Key': 'Name',
-                        'Value': 'openvpn.cyber-unh.org'
-                        },
-                      ]
-            }
-
-# CTF run in Ohio
-spec_json = { "local": { "region": "us-east-2", 
-                         "sg": ["sg-06c9b734c321734ca",], # KOTH
-                         "sshkey": "ohio",
-                         "ami": "ami-0dacb0c129b49f529"
-                         },
-              "tags": [ { 'Key': 'DNS',
-                          'Value': 'ctf.cyber-unh.org'
-                          },
-                        { 'Key': 'Name',
-                          'Value': 'ctf.cyber-unh.org'
-                          },
-                        ]
-              }
+tags = [ { 'Key': 'DNS', 'Value': '' },
+         { 'Key': 'Name', 'Value': '' },
+         ]
 
 
-docker_userdata = '''
+# The system setup substring
+system_setup = '''#! /bin/bash
+yum update -y
+
 '''
-
-# OpenVPN Access Server install
-openvpnas_userdata = '''
-'''
-
 
 # Run agent for scoring ownership
-scoring = '''wget https://s3.amazonaws.com/cyber-unh.org/ctf-scripts/ctf-ownership-scoring.py
+scoring = '''cd /root
+wget https://s3.amazonaws.com/cyber-unh.org/ctf-scripts/ctf-ownership-scoring.py
 python ctf-ownership-scoring.py &
 
 '''
 
-def main():
-        # Two command arguments in fixed order: username configs
-        # example:  python start-ec2-instance.py kmh722 "ssh_backup_keys,ctf_scoring"
-        username = sys.argv[1]
-        attack_string = sys.argv[2]
-        
-        # The system setup substring
-        system_setup = '''#! /bin/bash
-sudo -i
-yum update -y
-
-'''
-        
-        # The user setup substring
-        usersetup = '''# Create user
+# The user setup substring
+usersetup = '''# Create user
 useradd <USER>
 passwd <USER> << EOF
-<USER>
-<USER>
+unhsecurity
+unhsecurity
 EOF
-cd /home/<USER>
-echo "<USER>" > OWNERSHIP
-chmod 644 OWNERSHIP
-chown <USER> OWNERSHIP
-chgrp <USER> OWNERSHIP
+echo "<USER>" > /tmp/OWNERSHIP
+chmod 644 /tmp/OWNERSHIP
+chown <USER> /tmp/OWNERSHIP
+chgrp <USER> /tmp/OWNERSHIP
 
 cd /root
 echo "unclaimed" > OWNERSHIP
-chmod 644 OWNERSHP
-        
+chmod 644 OWNERSHIP
+
 # Allow SSH password access
 sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
 systemctl restart sshd
 
 '''        
-        usersetup = re.sub(r'<USER>', username, usersetup )
+
+attacks1 = '''
+chmod u+s /bin/tar
+mkdir /home/<USER>/.ssh
+cd /home/<USER>/.ssh
+ssh-keygen -P password -C backup -f id_rsa
+cat /root/.ssh/authorized_keys id_rsa.pub > .authorized_keys.bak
+chmod 600 .authorized_keys.bak
+/bin/cp .authorized_keys.bak /root/.ssh/authorized_keys
+chown -R <USER> ../.ssh
+chgrp -R <USER> ../.ssh
+'''
+
+def resetUser(config, username, attack_list):
+
+
+    setup = re.sub(r'<USER>', username, usersetup ) # + re.sub(r'<USER>', username, attacks1 )
+    for t in tags:
+        t['Value'] = username + '.cyber-unh.org'
         
-        # Expand attack list to needed shell commands
-        attack_list = attack_string.split(",")
-        attacks = ""
-        for a in attack_list:
-                attacks += "wget https://s3.amazonaws.com/cyber-unh.org/ctf-scripts/" + a + "\nchmod +x ./" + a + "\n./" + a + " " + username +"\n"
-        
-        # pick the location specification to use
-        spec = spec_json
-        userdata = system_setup + usersetup + attacks + scoring
-        
-        ec2 = boto3.resource('ec2', region_name=spec['local']['region'])
-        
-        # create a new EC2 instance
-        instances = ec2.create_instances(
-             ImageId=spec['local']['ami'],
+    # Expand attack list to needed shell commands
+    attack_list = attack_list.split(",")
+    attacks = ""
+    for a in config['attack_list']:
+        attacks += "\nwget https://s3.amazonaws.com/cyber-unh.org/ctf-scripts/" + a + "\nchmod +x ./" + a + "\n./" + a + " " + username +"\n"
+
+    # build the userdata string
+    userdata = system_setup + setup + attacks + scoring
+
+    ec2 = boto3.resource('ec2', region_name=spec['region'])
+
+    # create a new EC2 instance
+    instances = ec2.create_instances(
+            ImageId=spec['ami'],
+            DryRun=True,
              MinCount=1,
              MaxCount=1, # if more than 1 AWS will create that many
              InstanceType='t2.micro',
-             KeyName=spec['local']['sshkey'],
+             KeyName=spec['sshkey'],
              UserData=userdata, # userdata is executed once the instance is started
-             SecurityGroupIds=spec['local']['sg'], # your defined security group
-             TagSpecifications=[{ 'ResourceType': 'instance', 'Tags': spec['tags'] },]
+             SecurityGroupIds=spec['sg'], # your defined security group
+             TagSpecifications=[{ 'ResourceType': 'instance', 'Tags': tags },]
         )
-        
-        print(instances)
 
+    print(instances)
+
+# Find the current DNS tagged instance (terminate if any found)
+def terminateInstance(username):
+    ec2 = boto3.client('ec2', region_name=spec['local']['region'])
+
+    response = ec2.describe_instances(
+        Filters=[
+            {
+                'Name': 'tag:DNS',
+                'Values': [username]
+            }
+        ]
+        )
+    for r in (response["Reservations"]):
+        for i in r["Instances"]:
+            print( "Terminating instance for %s", (username) )
+#FIX            i.terminate()
+    
+# Two command arguments in fixed order: username configs
+# example:  python create-user-hill.py configuration.json kmh722   
 if __name__=='__main__':
-    main()
+    config = sys.argv[1]
+    username = sys.argv[2]
+    terminateInstance(username + spec{'domain'] )
+    resetUser(config, username)
 
 # EOF
