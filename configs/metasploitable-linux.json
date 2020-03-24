@@ -1,0 +1,8 @@
+{
+    "region": "us-east-2", 
+    "sg": ["sg-036a520b734a05372"],
+    "sshkey": "ohio",
+    "ami": "ami-0c50b17bffebf456b",
+    "domain" : ".cyber-unh.org",
+    "command_list" : []
+}

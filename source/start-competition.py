@@ -35,7 +35,7 @@ try:
         print(username)
         username = username.replace(".","")
         print(username)
-        os.system("python3 KOTH-deployuser.py " + username + " 'suid-tar,ssh-backup-keys'")
+        os.system("python3 create-user-hill.py ../configs/metasploitable-linux.json " + username )
    
 except ClientError as e:
     print(e)

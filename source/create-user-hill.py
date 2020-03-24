@@ -1,28 +1,13 @@
 import boto3
-import sys, re
-
-# KOTH run in Ohio
-spec = { "region": "us-east-2", 
-         "sg": "sg-036a520b734a05372", # UNH-CTF
-         "sshkey": "ohio",
-         "ami": "ami-00d711b946af13548",
-         "domain" : ".cyber-unh.org",
-         "attack_list" : []
-         }
+import sys, re, json
 
 tags = [ { 'Key': 'DNS', 'Value': '' },
          { 'Key': 'Name', 'Value': '' },
          ]
 
 
-# The system setup substring
-system_setup = '''#! /bin/bash
-yum update -y
-
-'''
-
 # Run agent for scoring ownership
-scoring = '''cd /root
+ctf_scoring = '''cd /root
 wget https://s3.amazonaws.com/cyber-unh.org/ctf-scripts/ctf-ownership-scoring.py
 python ctf-ownership-scoring.py &
 
@@ -43,9 +28,12 @@ chgrp <USER> /tmp/OWNERSHIP
 cd /root
 echo "unclaimed" > OWNERSHIP
 chmod 644 OWNERSHIP
+'''
 
+password_auth = '''
 # Allow SSH password access
 sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+sed -i 's/#PasswordAuthentication/PasswordAuthentication/g' /etc/ssh/sshd_config
 systemctl restart sshd
 
 '''        
@@ -62,42 +50,43 @@ chown -R <USER> ../.ssh
 chgrp -R <USER> ../.ssh
 '''
 
-def resetUser(config, username, attack_list):
+def resetUser(config_data, username):
 
 
     setup = re.sub(r'<USER>', username, usersetup ) # + re.sub(r'<USER>', username, attacks1 )
     for t in tags:
         t['Value'] = username + '.cyber-unh.org'
         
-    # Expand attack list to needed shell commands
-    attack_list = attack_list.split(",")
-    attacks = ""
-    for a in config['attack_list']:
-        attacks += "\nwget https://s3.amazonaws.com/cyber-unh.org/ctf-scripts/" + a + "\nchmod +x ./" + a + "\n./" + a + " " + username +"\n"
-
-    # build the userdata string
-    userdata = system_setup + setup + attacks + scoring
-
-    ec2 = boto3.resource('ec2', region_name=spec['region'])
+    # Add shell commands to setup the box
+    commands = ''
+    for a in config_data['command_list']:
+        commands += a + "\n"
+    if config_data['password_authentication'] == 'true':
+        commands += password_auth
+    if config_data['ctf_scoring'] == 'true':
+        commands += ctf_scoring
+    for a in config_data['reboot_commands']:
+        commands += a + "\n"
+        
+    ec2 = boto3.resource('ec2', region_name=config_data['region'])
 
     # create a new EC2 instance
     instances = ec2.create_instances(
-            ImageId=spec['ami'],
-            DryRun=True,
+            ImageId=config_data['ami'],
              MinCount=1,
              MaxCount=1, # if more than 1 AWS will create that many
              InstanceType='t2.micro',
-             KeyName=spec['sshkey'],
-             UserData=userdata, # userdata is executed once the instance is started
-             SecurityGroupIds=spec['sg'], # your defined security group
+             KeyName=config_data['sshkey'],
+             UserData=commands, # userdata is executed once the instance is started
+             SecurityGroupIds=config_data['sg'], # your defined security group
              TagSpecifications=[{ 'ResourceType': 'instance', 'Tags': tags },]
         )
 
     print(instances)
 
 # Find the current DNS tagged instance (terminate if any found)
-def terminateInstance(username):
-    ec2 = boto3.client('ec2', region_name=spec['local']['region'])
+def terminateInstance(config_data, username):
+    ec2 = boto3.client('ec2', region_name=config_data['region'])
 
     response = ec2.describe_instances(
         Filters=[
@@ -116,8 +105,12 @@ def terminateInstance(username):
 # example:  python create-user-hill.py configuration.json kmh722   
 if __name__=='__main__':
     config = sys.argv[1]
+    #open the file
+    with open(config) as f:
+        config_data = json.load(f)    
+    
     username = sys.argv[2]
-    terminateInstance(username + spec{'domain'] )
-    resetUser(config, username)
+    terminateInstance(config_data, username + '.' + config_data['domain'] )
+    resetUser(config_data, username)
 
 # EOF

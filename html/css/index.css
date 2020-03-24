@@ -106,7 +106,7 @@ body{
   height: 100vh;
 
   background-image: url(../images/background2.jpg);
-  background-size: cover;
+  background-size: contain;
   background-repeat: no-repeat;
   background-position: center top;
 
